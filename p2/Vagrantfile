@@ -1,0 +1,97 @@
+Vagrant.configure("2") do |config|
+  config.vm.box = "ubuntu/jammy64"
+
+  # ==========================================
+  # TEK MAKİNE: SERVER (ahmtemelS) - K3s Server
+  # 3 web uygulaması + Ingress
+  # ==========================================
+  config.vm.define "ahmtemelS" do |server|
+    server.vm.hostname = "ahmtemelS"
+    server.vm.network "private_network", ip: "192.168.56.110"
+
+    # Kubernetes manifest dosyalarını VM'e aktar
+    server.vm.synced_folder "confs/", "/home/vagrant/confs"
+
+    server.vm.provider "virtualbox" do |v|
+      v.name = "ahmtemelS"
+      v.memory = 1536
+      v.cpus = 2
+    end
+
+    server.vm.provision "shell", inline: <<-SHELL
+      echo "============================================="
+      echo ">>> Part 2: K3s Server + 3 App Kuruluyor <<<"
+      echo "============================================="
+
+      # ---- ADIM 1: K3s Server Kurulumu ----
+      echo ">>> [1/4] K3s Server kuruluyor..."
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server \
+        --write-kubeconfig-mode 644 \
+        --node-ip=192.168.56.110 \
+        --bind-address=192.168.56.110 \
+        --flannel-iface=eth1" sh -s -
+
+      # ---- ADIM 2: K3s'in hazır olmasını bekle ----
+      echo ">>> [2/4] K3s hazır olana kadar bekleniyor..."
+      export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+      for i in $(seq 1 24); do
+        if kubectl get nodes 2>/dev/null | grep -q " Ready"; then
+          echo "    ✓ Node hazır!"
+          break
+        fi
+        echo "    Bekleniyor... ($((i*5))s)"
+        sleep 5
+      done
+
+      echo ">>> Traefik Ingress Controller bekleniyor..."
+      for i in $(seq 1 30); do
+        if kubectl get pods -n kube-system 2>/dev/null | grep traefik | grep -q "Running"; then
+          echo "    ✓ Traefik hazır!"
+          break
+        fi
+        echo "    Traefik bekleniyor... ($((i*5))s)"
+        sleep 5
+      done
+
+      # ---- ADIM 3: 3 Uygulamayı Deploy Et ----
+      echo ">>> [3/4] Uygulamalar deploy ediliyor..."
+      kubectl apply -f /home/vagrant/confs/app-one.yaml
+      kubectl apply -f /home/vagrant/confs/app-two.yaml
+      kubectl apply -f /home/vagrant/confs/app-three.yaml
+
+      # ---- ADIM 4: Ingress Kurallarını Uygula ----
+      echo ">>> [4/4] Ingress kuralları uygulanıyor..."
+      kubectl apply -f /home/vagrant/confs/ingress.yaml
+
+      # kubectl kısa yol ayarları
+      mkdir -p /home/vagrant/.kube
+      sudo cp /etc/rancher/k3s/k3s.yaml /home/vagrant/.kube/config
+      sudo chown vagrant:vagrant /home/vagrant/.kube/config
+      echo "alias k='kubectl'" >> /home/vagrant/.bashrc
+
+      # Pod'ların hazır olmasını bekle
+      echo ">>> Pod'lar başlatılıyor, bekleniyor..."
+      sleep 10
+      kubectl wait --for=condition=ready pod --all --timeout=120s 2>/dev/null || true
+
+      # Conntrack tablosunu temizle
+      sudo apt-get install -y conntrack > /dev/null 2>&1
+      sudo conntrack -F 2>/dev/null || true
+
+      echo ""
+      echo "============================================="
+      echo ">>>       KURULUM TAMAMLANDI!              <<<"
+      echo "============================================="
+      echo ""
+      kubectl get all
+      echo ""
+      kubectl get ingress
+      echo ""
+      echo "Test komutları:"
+      echo "  curl -H 'Host:app1.com' 192.168.56.110"
+      echo "  curl -H 'Host:app2.com' 192.168.56.110"
+      echo "  curl 192.168.56.110  (varsayılan → app3)"
+    SHELL
+  end
+end

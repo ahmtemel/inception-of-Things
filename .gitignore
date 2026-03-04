@@ -1,0 +1,15 @@
+# Vagrant
+.vagrant/
+node-token
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+password.md
