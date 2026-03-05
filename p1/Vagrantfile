@@ -1,64 +1,28 @@
 Vagrant.configure("2") do |config|
-  config.vm.box = "ubuntu/jammy64"
+  # Using Debian 12 for its small footprint
+  config.vm.box = "debian/bookworm64"
 
-  # ==========================================
-  # 1. MAKİNE: SERVER (ahmtemelS) - K3s Server
-  # ==========================================
-  config.vm.define "ahmtemelS" do |server|
-    server.vm.hostname = "ahmtemelS"
-    server.vm.network "private_network", ip: "192.168.56.110"
-
-    server.vm.provider "virtualbox" do |v|
-      v.name = "ahmtemelS"
-      v.memory = 1024
-      v.cpus = 1
+  # --- SERVER (CONTROL PLANE) ---
+  config.vm.define "aliS" do |s|
+    s.vm.hostname = "aliS"
+    s.vm.network "private_network", ip: "192.168.56.110"
+    s.vm.provider "virtualbox" do |vb|
+      vb.cpus = 1
+      vb.memory = 1024
+      vb.name = "aliS"
     end
-
-    server.vm.provision "shell", inline: <<-SHELL
-      echo ">>> K3s Server Kuruluyor (ahmtemelS) <<<"
-
-      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server \
-        --write-kubeconfig-mode 644 \
-        --node-ip=192.168.56.110 \
-        --bind-address=192.168.56.110 \
-        --flannel-iface=eth1" sh -s -
-
-      sleep 15
-
-      # Worker'ın bağlanması için token'ı paylaş
-      sudo cp /var/lib/rancher/k3s/server/node-token /vagrant/node-token
-
-      # kubectl ayarları
-      mkdir -p /home/vagrant/.kube
-      sudo cp /etc/rancher/k3s/k3s.yaml /home/vagrant/.kube/config
-      sudo chown vagrant:vagrant /home/vagrant/.kube/config
-      echo "alias k='kubectl'" >> /home/vagrant/.bashrc
-    SHELL
+    s.vm.provision "shell", path: "scripts/server_setup.sh"
   end
 
-  # ==========================================
-  # 2. MAKİNE: WORKER (ahmtemelSW) - K3s Agent
-  # ==========================================
-  config.vm.define "ahmtemelSW" do |worker|
-    worker.vm.hostname = "ahmtemelSW"
-    worker.vm.network "private_network", ip: "192.168.56.111"
-
-    worker.vm.provider "virtualbox" do |v|
-      v.name = "ahmtemelSW"
-      v.memory = 1024
-      v.cpus = 1
+  # --- WORKER (AGENT) ---
+  config.vm.define "aliSW" do |sw|
+    sw.vm.hostname = "aliSW"
+    sw.vm.network "private_network", ip: "192.168.56.111"
+    sw.vm.provider "virtualbox" do |vb|
+      vb.cpus = 1
+      vb.memory = 1024
+      vb.name = "aliSW"
     end
-
-    worker.vm.provision "shell", inline: <<-SHELL
-      echo ">>> K3s Worker Kuruluyor (ahmtemelSW) <<<"
-
-      TOKEN=$(cat /vagrant/node-token)
-
-      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="agent \
-        --server https://192.168.56.110:6443 \
-        --token ${TOKEN} \
-        --node-ip=192.168.56.111 \
-        --flannel-iface=eth1" sh -s -
-    SHELL
+    sw.vm.provision "shell", path: "scripts/worker_setup.sh"
   end
 end

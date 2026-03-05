@@ -1,116 +1,108 @@
 #!/bin/bash
-# =============================================
-# Part 3: K3d + Argo CD Kurulum Scripti
-# Bu script savunma sırasında çalıştırılacaktır.
-# Gerekli tüm araçları kurar ve yapılandırır.
-# =============================================
-
 set -e
 
+# Colors for output
+GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-GREEN='\033[1;32m'
-RED='\033[1;31m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
-echo -e "${YELLOW}=============================================${NC}"
-echo -e "${YELLOW}  Part 3: K3d + Argo CD Kurulum Başlıyor     ${NC}"
-echo -e "${YELLOW}=============================================${NC}"
+info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WAIT]${NC} $1"; }
 
-# ---- ADIM 1: Docker Kurulumu ----
-echo -e "\n${GREEN}>>> [1/7] Docker kuruluyor...${NC}"
-if ! command -v docker &> /dev/null; then
-    sudo apt-get update -qq
-    sudo apt-get install -y -qq \
-        ca-certificates \
-        curl \
-        gnupg \
-        lsb-release > /dev/null 2>&1
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    sudo apt-get update -qq
-    sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin > /dev/null 2>&1
-    sudo usermod -aG docker $USER
-    echo -e "  ${GREEN}✓ Docker kuruldu${NC}"
-else
-    echo -e "  ${GREEN}✓ Docker zaten kurulu${NC}"
-fi
-sudo systemctl start docker
-sudo systemctl enable docker
+# ─────────────────────────────────────────────
+# 1. Check prerequisites
+# ─────────────────────────────────────────────
+for cmd in docker kubectl k3d; do
+  if ! command -v $cmd &>/dev/null; then
+    echo "ERROR: '$cmd' is not installed. Please install it first."
+    exit 1
+  fi
+done
+info "All prerequisites found (docker, kubectl, k3d)"
 
-# ---- ADIM 2: kubectl Kurulumu ----
-echo -e "\n${GREEN}>>> [2/7] kubectl kuruluyor...${NC}"
-if ! command -v kubectl &> /dev/null; then
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-    sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-    rm -f kubectl
-    echo -e "  ${GREEN}✓ kubectl kuruldu${NC}"
-else
-    echo -e "  ${GREEN}✓ kubectl zaten kurulu${NC}"
-fi
+# ─────────────────────────────────────────────
+# 2. Create K3d cluster
+# ─────────────────────────────────────────────
+# Delete existing cluster if it exists
+k3d cluster delete iot-p3 2>/dev/null || true
 
-# ---- ADIM 3: K3d Kurulumu ----
-echo -e "\n${GREEN}>>> [3/7] K3d kuruluyor...${NC}"
-if ! command -v k3d &> /dev/null; then
-    curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-    echo -e "  ${GREEN}✓ K3d kuruldu${NC}"
-else
-    echo -e "  ${GREEN}✓ K3d zaten kurulu${NC}"
-fi
-
-# ---- ADIM 4: K3d Cluster Oluştur ----
-echo -e "\n${GREEN}>>> [4/7] K3d cluster oluşturuluyor...${NC}"
-if k3d cluster list 2>/dev/null | grep -q "iot-p3"; then
-    echo -e "  ${YELLOW}! Cluster zaten var, silip yeniden oluşturuluyor...${NC}"
-    k3d cluster delete iot-p3
-fi
+info "Creating K3d cluster 'iot-p3'..."
 k3d cluster create iot-p3 --port "8888:8888@loadbalancer"
-echo -e "  ${GREEN}✓ K3d cluster oluşturuldu${NC}"
 
-# ---- ADIM 5: Namespace'leri Oluştur ----
-echo -e "\n${GREEN}>>> [5/7] Namespace'ler oluşturuluyor...${NC}"
-kubectl create namespace argocd 2>/dev/null || true
-kubectl create namespace dev 2>/dev/null || true
-echo -e "  ${GREEN}✓ argocd ve dev namespace'leri oluşturuldu${NC}"
+# Ensure kubeconfig is set correctly
+export KUBECONFIG=$(k3d kubeconfig write iot-p3)
+# Also write it to the default location so kubectl works after the script
+mkdir -p /home/${SUDO_USER:-$USER}/.kube
+k3d kubeconfig get iot-p3 > /home/${SUDO_USER:-$USER}/.kube/config
+chown -R ${SUDO_USER:-$USER}:${SUDO_USER:-$USER} /home/${SUDO_USER:-$USER}/.kube 2>/dev/null || true
 
-# ---- ADIM 6: Argo CD Kurulumu ----
-echo -e "\n${GREEN}>>> [6/7] Argo CD kuruluyor...${NC}"
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml 2>/dev/null
-echo "  Argo CD pod'ları başlatılıyor, bekleniyor..."
-kubectl wait --for=condition=ready pod --all -n argocd --timeout=180s 2>/dev/null || true
-echo -e "  ${GREEN}✓ Argo CD kuruldu${NC}"
+# Wait for cluster to be ready
+warn "Waiting for cluster nodes to be ready..."
+kubectl wait --for=condition=Ready nodes --all --timeout=120s
+info "K3d cluster 'iot-p3' is ready!"
 
-# ---- ADIM 7: Argo CD Application Oluştur ----
-echo -e "\n${GREEN}>>> [7/7] Argo CD Application oluşturuluyor...${NC}"
-kubectl apply -f /home/vagrant/confs/application.yaml 2>/dev/null || \
-kubectl apply -f application.yaml 2>/dev/null || \
-echo -e "  ${YELLOW}! application.yaml bulunamadı, manuel uygulayın${NC}"
+# ─────────────────────────────────────────────
+# 3. Create namespaces
+# ─────────────────────────────────────────────
+info "Creating namespaces..."
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace dev --dry-run=client -o yaml | kubectl apply -f -
 
-# Pod'ların hazır olmasını bekle
-sleep 10
-kubectl wait --for=condition=ready pod --all -n dev --timeout=120s 2>/dev/null || true
+# ─────────────────────────────────────────────
+# 4. Install Argo CD
+# ─────────────────────────────────────────────
+info "Installing Argo CD..."
+kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-# ---- SONUÇ ----
+# Wait for Argo CD pods to be ready
+warn "Waiting for Argo CD pods to be ready (this may take a few minutes)..."
+kubectl wait --for=condition=Available deployment --all -n argocd --timeout=300s
+info "Argo CD is installed and running!"
+
+# ─────────────────────────────────────────────
+# 5. Deploy the Argo CD Application
+# ─────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFS_DIR="$(dirname "$SCRIPT_DIR")/confs"
+
+info "Applying Argo CD Application manifest..."
+kubectl apply -f "$CONFS_DIR/application.yaml"
+
+# ─────────────────────────────────────────────
+# 6. Wait for the app to sync and deploy
+# ─────────────────────────────────────────────
+warn "Waiting for wil-playground pod to start in 'dev' namespace..."
+for i in $(seq 1 60); do
+  if kubectl get pods -n dev 2>/dev/null | grep -q "Running"; then
+    break
+  fi
+  sleep 5
+done
+
+# ─────────────────────────────────────────────
+# 7. Print status and access info
+# ─────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}=============================================${NC}"
-echo -e "${GREEN}       KURULUM TAMAMLANDI!                   ${NC}"
-echo -e "${GREEN}=============================================${NC}"
+info "============================================"
+info "  Setup Complete!"
+info "============================================"
 echo ""
 
-# Admin şifresini göster
-ARGO_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
-echo -e "Argo CD Admin Şifresi: ${YELLOW}${ARGO_PASS}${NC}"
+# Get Argo CD admin password
+ARGOCD_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d)
+
+info "Argo CD Dashboard:"
+echo "  URL:      https://localhost:8080"
+echo "  User:     admin"
+echo "  Password: $ARGOCD_PASS"
 echo ""
-echo "Argo CD Arayüzü:"
+info "To access Argo CD UI, run in a separate terminal:"
 echo "  kubectl port-forward svc/argocd-server -n argocd 8080:443 &"
-echo "  Tarayıcı: https://localhost:8080"
-echo "  Kullanıcı: admin"
 echo ""
-
-kubectl get ns
-echo ""
+info "Application status:"
 kubectl get pods -n dev
 echo ""
-echo "Test: curl http://localhost:8888/"
+info "Test the app:"
+echo "  curl http://localhost:8888/"
+echo ""
