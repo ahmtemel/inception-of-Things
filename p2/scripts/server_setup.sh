@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 # 1. Update and install curl
@@ -6,9 +7,13 @@ apt-get update && apt-get install -y curl
 
 # 2. Install K3s Server
 # --write-kubeconfig-mode 644 allows you to use kubectl without sudo
-# --node-ip specifies which network interface K3s should use
+# --node-ip, --bind-address, --advertise-address: use the private network interface
+# --flannel-iface: ensures flannel uses the correct interface (eth1)
 curl -sfL https://get.k3s.io | sh -s - server \
     --node-ip=192.168.56.110 \
+    --bind-address=192.168.56.110 \
+    --advertise-address=192.168.56.110 \
+    --flannel-iface=eth1 \
     --write-kubeconfig-mode=644
 
 # 3. Wait for K3s to be fully ready
