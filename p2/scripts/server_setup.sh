@@ -16,14 +16,18 @@ curl -sfL https://get.k3s.io | sh -s - server \
     --flannel-iface=eth1 \
     --write-kubeconfig-mode=644
 
-# 3. Wait for K3s to be fully ready
+# 3. vagrant kullanıcısı için kubectl PATH ve KUBECONFIG ayarla
+echo 'export PATH=$PATH:/usr/local/bin' >> /home/vagrant/.bashrc
+echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> /home/vagrant/.bashrc
+
+# 4. Wait for K3s to be fully ready
 echo "Waiting for K3s to be ready..."
 until kubectl get nodes 2>/dev/null | grep -q " Ready"; do
   sleep 2
 done
 echo "K3s is ready!"
 
-# 4. Deploy the three web applications and ingress
+# 5. Deploy the three web applications and ingress
 kubectl apply -f /vagrant/confs/app-one.yaml
 kubectl apply -f /vagrant/confs/app-two.yaml
 kubectl apply -f /vagrant/confs/app-three.yaml

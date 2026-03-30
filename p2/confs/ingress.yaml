@@ -27,7 +27,18 @@ spec:
                 name: app-two
                 port:
                   number: 80
-    # Default (no host) -> app-three service
+    # Host: app3.com -> app-three service (explicit)
+    - host: app3.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app-three
+                port:
+                  number: 80
+    # Default (no host match) -> app-three service
     - http:
         paths:
           - path: /
