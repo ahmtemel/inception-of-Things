@@ -1,3 +1,4 @@
+ENV['VAGRANT_DEFAULT_PROVIDER'] = 'libvirt'
 Vagrant.configure("2") do |config|
   # Debian 12 hafif olduğu için iyi bir tercih
   config.vm.box = "debian/bookworm64"
