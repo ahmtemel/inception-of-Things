@@ -27,17 +27,11 @@ Vagrant.configure("2") do |config|
   end
 
   # --- HOST /etc/hosts OTOMATİK GÜNCELLEME ---
-  # vagrant up sonrası Mac'in /etc/hosts dosyasına app1.com ve app2.com ekler
+  # vagrant up sonrası Mac'in /etc/hosts dosyasına domain girişlerini ekler
   config.trigger.after :up do |trigger|
-    trigger.info = "Adding app1.com and app2.com to /etc/hosts..."
+    trigger.info = "Adding app domains to /etc/hosts on host machine..."
     trigger.run = {
-      inline: <<-SHELL
-        grep -q "app1.com" /etc/hosts || sudo sh -c 'echo "192.168.56.110 app1.com" >> /etc/hosts'
-        grep -q "app2.com" /etc/hosts || sudo sh -c 'echo "192.168.56.110 app2.com" >> /etc/hosts'
-        grep -q "app3.com" /etc/hosts || sudo sh -c 'echo "192.168.56.110 app3.com" >> /etc/hosts'
-        grep -q "denden.com" /etc/hosts || sudo sh -c 'echo "192.168.56.110 denden.com" >> /etc/hosts'
-        echo "Done: app1.com, app2.com, app3.com, denden.com added to /etc/hosts"
-      SHELL
+      path: "scripts/update_hosts.sh"
     }
   end
 end
