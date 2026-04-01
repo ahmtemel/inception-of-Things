@@ -1,12 +1,11 @@
 ENV['VAGRANT_DEFAULT_PROVIDER'] = 'libvirt'
 Vagrant.configure("2") do |config|
-  # Debian 12 hafif olduğu için iyi bir tercih
   config.vm.box = "debian/bookworm64"
 
   # --- L2 PROVIDER AYARLARI (KVM/LIBVIRT) ---
   config.vm.provider :libvirt do |libvirt|
     libvirt.driver = "kvm"
-    libvirt.cpu_mode = 'host-passthrough' # Intel iMac CPU özelliklerini L2'ye geçirir
+    libvirt.cpu_mode = 'host-passthrough' 
     libvirt.nested = true                 # İç içe sanallaştırmayı aktif eder
     libvirt.nic_model_type = 'virtio'     # Ağ hızı için kritik
     libvirt.disk_bus = 'scsi'             # Disk hızı için kritik
@@ -26,8 +25,7 @@ Vagrant.configure("2") do |config|
     s.vm.provision "shell", path: "scripts/server_setup.sh"
   end
 
-  # --- HOST /etc/hosts OTOMATİK GÜNCELLEME ---
-  # vagrant up sonrası Mac'in /etc/hosts dosyasına domain girişlerini ekler
+  # vagrant up sonrası  /etc/hosts dosyasına domain girişlerini ekler
   config.trigger.after :up do |trigger|
     trigger.info = "Adding app domains to /etc/hosts on host machine..."
     trigger.run = {

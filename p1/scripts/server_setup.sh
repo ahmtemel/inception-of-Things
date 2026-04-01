@@ -6,7 +6,6 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update && apt-get install -y curl
 
 # 2. Install K3s Server
-# Not: libvirt altında eth1 arayüzü K3s trafiği için kullanılacak
 curl -sfL https://get.k3s.io | sh -s - server \
     --node-ip=192.168.56.110 \
     --bind-address=192.168.56.110 \

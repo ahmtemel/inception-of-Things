@@ -1,12 +1,11 @@
 ENV['VAGRANT_DEFAULT_PROVIDER'] = 'libvirt'
 Vagrant.configure("2") do |config|
-  # Debian 12 hafif olduğu için iyi bir tercih
   config.vm.box = "debian/bookworm64"
 
   # --- L2 PROVIDER AYARLARI (KVM/LIBVIRT) ---
   config.vm.provider :libvirt do |libvirt|
     libvirt.driver = "kvm"
-    libvirt.cpu_mode = 'host-passthrough' # Intel iMac CPU özelliklerini L2'ye geçirir
+    libvirt.cpu_mode = 'host-passthrough' #CPU özelliklerini L2'ye geçirir
     libvirt.nested = true                 # İç içe sanallaştırmayı aktif eder
     libvirt.nic_model_type = 'virtio'     # Ağ hızı için kritik
     libvirt.disk_bus = 'scsi'             # Disk hızı için kritik
@@ -16,7 +15,6 @@ Vagrant.configure("2") do |config|
   # --- SERVER (CONTROL PLANE) ---
   config.vm.define "aliS" do |s|
     s.vm.hostname = "aliS"
-    # libvirt'te ağ yönetimi biraz farklıdır, eth1 için bu IP'yi atar
     s.vm.network "private_network", ip: "192.168.56.110", libvirt__forward_mode: "none"
     
     s.vm.provider :libvirt do |v|
